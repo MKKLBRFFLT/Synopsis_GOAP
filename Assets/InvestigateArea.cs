@@ -7,7 +7,7 @@ public class InvestigateArea : GAction
 {
     public override bool PrePerform()
     {
-        // Ensure there's a target marker set
+        // check for marker
         if (target == null)
         {
             return false;
@@ -17,7 +17,7 @@ public class InvestigateArea : GAction
 
     public override bool PostPerform()
     {
-        // Action completed successfully
+        
         return true;
     }
 }

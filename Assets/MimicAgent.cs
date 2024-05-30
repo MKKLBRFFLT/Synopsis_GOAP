@@ -11,7 +11,7 @@ public class MimicAgent : GAgent
     NavMeshAgent navMeshAgent;
     public LayerMask lineOfSightMask;
     GameObject player;
-    public GameObject markerPrefab; // Assign this in the Unity Inspector
+    public GameObject markerPrefab; 
     private GameObject currentMarker;
     private bool playerLastSeen = false;
 
@@ -108,7 +108,7 @@ public class MimicAgent : GAgent
 
     public bool CanSeePlayer(GameObject player)
     {
-        Vector3 playerCenter = player.transform.position + Vector3.up * 4.5f; // tallet er til at "tilte" raycast op
+        Vector3 playerCenter = player.transform.position + Vector3.up * 4.5f; // Tilt up, default too low
         Vector3 direction = playerCenter - transform.position;
         float maxDistance = Vector3.Distance(transform.position, playerCenter);
 

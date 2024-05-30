@@ -5,16 +5,16 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     public float moveSpeed = 5f;
-    public float rotationSpeed = 720f; // Degrees per second
+    public float rotationSpeed = 720f; 
 
     private Rigidbody rb;
 
     private void Start()
     {
         rb = GetComponent<Rigidbody>();
-        rb.isKinematic = false; // Ensure the Rigidbody is not kinematic
-        rb.interpolation = RigidbodyInterpolation.Interpolate; // For smoother movement
-        rb.collisionDetectionMode = CollisionDetectionMode.Continuous; // Better collision detection
+        rb.isKinematic = false; 
+        rb.interpolation = RigidbodyInterpolation.Interpolate; 
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
     }
 
     private void Update()
@@ -24,17 +24,17 @@ public class PlayerMovement : MonoBehaviour
 
     private void MovePlayer()
     {
-        // Get input from WASD or arrow keys
+        
         float moveHorizontal = Input.GetAxis("Horizontal");
         float moveVertical = Input.GetAxis("Vertical");
 
-        // Create a new vector for movement
+        
         Vector3 movement = new Vector3(moveHorizontal, 0, moveVertical).normalized * moveSpeed;
 
-        // Apply the movement vector to the Rigidbody's velocity
+        
         rb.velocity = movement;
 
-        // Rotate the player to face the direction of movement
+        
         if (movement != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(movement);
