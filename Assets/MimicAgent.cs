@@ -3,10 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using System.Linq;
 
 public class MimicAgent : GAgent
 {
-
     public float speed = 5f;
     NavMeshAgent navMeshAgent;
     public LayerMask lineOfSightMask;
@@ -14,6 +14,9 @@ public class MimicAgent : GAgent
     public GameObject markerPrefab; 
     private GameObject currentMarker;
     private bool playerLastSeen = false;
+    private GameObject[] patrolPoints;
+    private int currentPatrolIndex = 0;
+    private GameManager gameManager;
 
     // Start is called before the first frame update
     void Start()
@@ -22,54 +25,159 @@ public class MimicAgent : GAgent
         base.Start();
 
         player = GameObject.FindWithTag("Player");
+        patrolPoints = GameObject.FindGameObjectsWithTag("PatrolPoint");
+
+        gameManager = FindObjectOfType<GameManager>();
+
+        if (gameManager == null)
+        {
+            Debug.LogError("GameManager not found in the scene.");
+        }
 
         SubGoal s1 = new SubGoal("isAtPlayer", 1, true);
         goals.Add(s1, 3);
 
         SubGoal s2 = new SubGoal("areaChecked", 1, true);
         goals.Add(s2, 1);
+
+        
+        currentMarker = Instantiate(markerPrefab, Vector3.zero, Quaternion.identity);
+        currentMarker.SetActive(false);
     }
 
     private void Update()
     {
-        if (currentAction != null && currentAction.target != null)
+        // Led altid efter spiller
+        if (CanSeePlayer(player))
         {
-            if (currentAction is GoToPlayer && CanSeePlayer(player))
+            // Ser spiller
+            playerLastSeen = true;
+            EvaluateGoals();
+        }
+        else if (currentAction is GoToPlayer)
+        {
+            // Mister spiller
+            if (playerLastSeen)
             {
-                navMeshAgent.SetDestination(currentAction.target.transform.position);
-                playerLastSeen = true;
-            }
-            else if (currentAction is GoToPlayer && !CanSeePlayer(player))
-            {
-                if (playerLastSeen)
-                {
-                    PlaceMarker();
-                    playerLastSeen = false;
-                }
+                MoveMarker(player.transform.position);
+                playerLastSeen = false;
                 SwitchToInvestigateArea();
             }
-            else if (currentAction is InvestigateArea && currentAction.running)
+        }
+        else if (currentAction is InvestigateArea)
+        {
+            // Led altid efter spiller
+            if (CanSeePlayer(player))
             {
-                // Check if the investigation is complete
+                playerLastSeen = true;
+                EvaluateGoals();
+            }
+            else
+            {
+                // Check om investigation er færdig
                 if (Vector3.Distance(transform.position, currentAction.target.transform.position) < 1f)
                 {
                     StopCurrentAction();
-                    ResetGoals();
+                    Debug.Log("Investigation complete, transitioning to next patrol point");
+
+                    // Marker til næste punkt
+                    MoveMarkerToNextPatrolPoint();
+
+                    EvaluateGoals();
                 }
+            }
+        }
+
+        
+        if (currentAction == null || !currentAction.running)
+        {
+            EvaluateGoals();
+        }
+    }
+
+    private void EvaluateGoals()
+    {
+        
+        if (planner == null || actionQueue == null || actionQueue.Count == 0)
+        {
+            planner = new GPlanner();
+
+            
+            var sortedGoals = from entry in goals orderby entry.Value descending select entry;
+
+            foreach (KeyValuePair<SubGoal, int> sg in sortedGoals)
+            {
+                
+                if (IsGoalAchievable(sg.Key))
+                {
+                    Debug.Log("Evaluating goal: " + sg.Key.sgoals.Keys.First() + " with priority " + sg.Value);
+                    actionQueue = planner.plan(actions, sg.Key.sgoals, null);
+                    if (actionQueue != null)
+                    {
+                        currentGoal = sg.Key;
+                        break;
+                    }
+                }
+            }
+        }
+
+        
+        if (actionQueue != null && actionQueue.Count > 0)
+        {
+            StopCurrentAction();
+            currentAction = actionQueue.Dequeue();
+            Debug.Log("Switching to action: " + currentAction.GetType().Name);
+            if (currentAction.PrePerform())
+            {
+                currentAction.running = true;
+                if (currentAction.target == null && currentAction.targetTag != "")
+                {
+                    currentAction.target = GameObject.FindWithTag(currentAction.targetTag);
+                }
+                if (currentAction.target != null)
+                {
+                    navMeshAgent.SetDestination(currentAction.target.transform.position);
+                    Debug.Log("Navigating to target: " + currentAction.target.name);
+                }
+            }
+            else
+            {
+                actionQueue = null;
             }
         }
     }
 
-    private void PlaceMarker()
+    
+    private bool IsGoalAchievable(SubGoal goal)
+    {
+        if (goal.sgoals.ContainsKey("isAtPlayer") && !CanSeePlayer(player))
+        {
+            
+            return false;
+        }
+        return true;
+    }
+
+    private void MoveMarker(Vector3 position)
     {
         if (currentMarker != null)
         {
-            Destroy(currentMarker);
+            currentMarker.transform.position = new Vector3(position.x, 1f, position.z);
+            currentMarker.SetActive(true);
+        }
+    }
+
+    private void MoveMarkerToNextPatrolPoint()
+    {
+        if (patrolPoints.Length == 0)
+        {
+            Debug.LogWarning("No patrol points set.");
+            return;
         }
 
-        Vector3 markerPosition = new Vector3(player.transform.position.x, 1f, player.transform.position.z);
-
-        currentMarker = Instantiate(markerPrefab, markerPosition, Quaternion.identity);
+        currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
+        Vector3 patrolPointPosition = patrolPoints[currentPatrolIndex].transform.position;
+        MoveMarker(patrolPointPosition);
     }
 
     private void SwitchToInvestigateArea()
@@ -92,23 +200,30 @@ public class MimicAgent : GAgent
             currentAction.PostPerform();
             currentAction = null;
             planner = null;
-            navMeshAgent.ResetPath(); // Stop the NavMeshAgent from moving
+            navMeshAgent.ResetPath(); 
         }
     }
 
-    private void ResetGoals()
-    {
-        goals.Clear();
-        SubGoal s1 = new SubGoal("isAtPlayer", 1, true);
-        goals.Add(s1, 3);
 
-        SubGoal s2 = new SubGoal("areaChecked", 1, true);
-        goals.Add(s2, 1);
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            // Notify the GameManager of game over
+            if (gameManager != null)
+            {
+                gameManager.GameOver();
+            }
+            else
+            {
+                Debug.LogError("GameManager reference is null. Cannot trigger game over.");
+            }
+        }
     }
 
     public bool CanSeePlayer(GameObject player)
     {
-        Vector3 playerCenter = player.transform.position + Vector3.up * 4.5f; // Tilt up, default too low
+        Vector3 playerCenter = player.transform.position + Vector3.up * 4.5f; 
         Vector3 direction = playerCenter - transform.position;
         float maxDistance = Vector3.Distance(transform.position, playerCenter);
 
@@ -124,7 +239,4 @@ public class MimicAgent : GAgent
         }
         return false;
     }
-
-
-
 }

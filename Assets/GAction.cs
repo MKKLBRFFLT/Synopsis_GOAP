@@ -48,7 +48,7 @@ public abstract class GAction : MonoBehaviour
         }
     }
 
-    public bool IsAchievable()
+    public virtual bool IsAchievable()
     {
         return true;
     }
